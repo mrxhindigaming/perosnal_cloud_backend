@@ -13,7 +13,7 @@ const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STR
 const containerName = process.env.AZURE_CONTAINER_NAME;
 
 // Use the upload route
-app.use('/', uploadRoute); // This means the upload route is /upload/upload
+app.use('/upload', uploadRoute); // This means the upload route is /upload/upload
 
 // Endpoint to list files in Azure Blob Storage
 app.get('/files', async (req, res) => {
