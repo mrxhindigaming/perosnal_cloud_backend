@@ -1,101 +1,26 @@
-// const express = require("express");
-// const cors = require("cors");
-// const multer = require("multer");
-// const fs = require("fs");
-// const path = require("path");
-// require('dotenv').config();
-
-// const uploadRoute = require('./routes/upload');
-// const app = express();
-// const PORT = 5000;
-
-// // Middleware
-// app.use(cors());
-// app.use(express.json());
-// app.use('/uploads', express.static('uploads')); // Serve files
-
-// // File upload setup
-// const storage = multer.diskStorage({
-//   destination: (req, file, cb) => cb(null, "uploads/"),
-//   filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
-// });
-// const upload = multer({ storage });
-
-// // Dummy auth middleware
-// const authMiddleware = (req, res, next) => {
-//   const token = req.headers.authorization?.split(" ")[1];
-//   if (token === "fake-token") {
-//     next();
-//   } else {
-//     res.status(401).json({ message: "Unauthorized" });
-//   }
-// };
-
-// // Routes
-// app.post("/api/upload", authMiddleware, upload.single("file"), (req, res) => {
-//   res.json({ message: "File uploaded" });
-// });
-
-// app.get("/api/files", authMiddleware, (req, res) => {
-//   fs.readdir("uploads", (err, files) => {
-//     if (err) return res.status(500).json({ message: "Error reading files" });
-//     const fileList = files.map(file => ({
-//       name: file,
-//       url: `http://localhost:${PORT}/uploads/${file}`
-//     }));
-//     res.json(fileList);
-//   });
-// });
-
-// app.delete("/api/delete/:fileName", authMiddleware, (req, res) => {
-//   const filePath = path.join("uploads", req.params.fileName);
-//   fs.unlink(filePath, err => {
-//     if (err) return res.status(404).json({ message: "File not found" });
-//     res.json({ message: "File deleted" });
-//   });
-// });
-
-// // Start server
-// app.listen(PORT, () => {
-//   console.log(`✅ Server is running on http://localhost:${PORT}`);
-// });
 const express = require('express');
-const cors = require('cors');
+const router = express.Router();
+const multer = require('multer');
 const { BlobServiceClient } = require('@azure/storage-blob');
-const uploadRoute = require('./routes/upload'); // Import upload route
+require('dotenv').config();
 
-const app = express();
-app.use(cors());
-app.use(express.json()); // Needed to parse JSON if used
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-// Azure Storage connection string
-const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
-const containerName = process.env.AZURE_CONTAINER_NAME;
-
-// Use the upload route
-app.use('/upload', uploadRoute); // This means the upload route is /upload/upload
-
-// Endpoint to list files in Azure Blob Storage
-app.get('/files', async (req, res) => {
+router.post('/upload', upload.single('file'), async (req, res) => {
   try {
-    const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
-    const containerClient = blobServiceClient.getContainerClient(containerName);
+    const blobServiceClient = BlobServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
+    const containerClient = blobServiceClient.getContainerClient(process.env.AZURE_CONTAINER_NAME);
 
-    let files = [];
-    for await (const blob of containerClient.listBlobsFlat()) {
-      const blobUrl = `https://${blobServiceClient.accountName}.blob.core.windows.net/${containerName}/${blob.name}`;
-      files.push({ name: blob.name, url: blobUrl });
-    }
+    const blobName = Date.now() + "-" + req.file.originalname;
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    await blockBlobClient.uploadData(req.file.buffer);
 
-    res.json(files);  
-  } catch (error) {
-    console.error('Error listing files from Azure:', error.message);
-    res.status(500).json({ message: 'Error listing blobs', error: error.message });
+    res.json({ message: '✅ File uploaded to Azure', fileName: blobName });
+  } catch (err) {
+    console.error("Upload Error:", err.message);
+    res.status(500).json({ error: 'Failed to upload' });
   }
 });
 
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`✅ Server is running on port ${PORT}`);
-});
+module.exports = router;
