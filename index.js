@@ -87,13 +87,15 @@ app.get('/files', async (req, res) => {
       files.push({ name: blob.name, url: blobUrl });
     }
 
-    res.json(files);
+    res.json(files);  
   } catch (error) {
     console.error('Error listing files from Azure:', error.message);
     res.status(500).json({ message: 'Error listing blobs', error: error.message });
   }
 });
 
-app.listen(5000, () => {
-  console.log('✅ Server is running on http://localhost:5000');
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`✅ Server is running on port ${PORT}`);
 });
