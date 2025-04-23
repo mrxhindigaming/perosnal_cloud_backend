@@ -1,26 +1,41 @@
+
 const express = require('express');
-const router = express.Router();
-const multer = require('multer');
+const cors = require('cors');
 const { BlobServiceClient } = require('@azure/storage-blob');
-require('dotenv').config();
+const uploadRoute = require('./routes/upload'); // Import upload route
 
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const app = express();
+app.use(cors());
+app.use(express.json()); // Needed to parse JSON if used
 
-router.post('/upload', upload.single('file'), async (req, res) => {
+// Azure Storage connection string
+const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const containerName = process.env.AZURE_CONTAINER_NAME;
+
+// Use the upload route
+app.use('/upload', uploadRoute); // This means the upload route is /upload/upload
+
+// Endpoint to list files in Azure Blob Storage
+app.get('/files', async (req, res) => {
   try {
-    const blobServiceClient = BlobServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
-    const containerClient = blobServiceClient.getContainerClient(process.env.AZURE_CONTAINER_NAME);
+    const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+    const containerClient = blobServiceClient.getContainerClient(containerName);
 
-    const blobName = Date.now() + "-" + req.file.originalname;
-    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
-    await blockBlobClient.uploadData(req.file.buffer);
+    let files = [];
+    for await (const blob of containerClient.listBlobsFlat()) {
+      const blobUrl = `https://${blobServiceClient.accountName}.blob.core.windows.net/${containerName}/${blob.name}`;
+      files.push({ name: blob.name, url: blobUrl });
+    }
 
-    res.json({ message: '✅ File uploaded to Azure', fileName: blobName });
-  } catch (err) {
-    console.error("Upload Error:", err.message);
-    res.status(500).json({ error: 'Failed to upload' });
+    res.json(files);  
+  } catch (error) {
+    console.error('Error listing files from Azure:', error.message);
+    res.status(500).json({ message: 'Error listing blobs', error: error.message });
   }
 });
 
-module.exports = router;
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`✅ Server is running on port ${PORT}`);
+});
